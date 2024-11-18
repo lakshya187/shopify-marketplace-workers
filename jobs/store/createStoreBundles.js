@@ -114,7 +114,7 @@ const CreateBundles = async () => {
 // Cron job that runs every minute
 
 export default () => {
-  cron.schedule("0/10 * * * * *", async () => {
+  cron.schedule("* * * * *", async () => {
     logger("info", "Running CreateBundles cron job...");
     await CreateBundles();
   });

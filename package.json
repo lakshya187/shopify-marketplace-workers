@@ -1,0 +1,27 @@
+{
+  "name": "giftkart-crons",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js",
+    "dev": "nodemon --inspect index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@sentry/node": "^7.86.0",
+    "dotenv": "^16.4.5",
+    "mongoose": "^8.8.1",
+    "node-cron": "^3.0.3",
+    "winston": "^3.17.0",
+    "winston-loggly-bulk": "^3.3.2"
+  },
+  "imports": {
+    "#common-functions/*": "./common-functions/*",
+    "#schemas/*": "./schemas/*"
+  }
+}

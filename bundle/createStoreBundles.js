@@ -1,10 +1,11 @@
 import cron from "node-cron";
-import logger from "../../common-functions/logger/index.js";
+import logger from "../common-functions/logger/index.js";
 import Stores from "#schemas/stores.js";
-import { BUNDLE_CREATION_STATUSES } from "./enums.js";
+
 import GetStoreOrders from "#common-functions/shopify/getStoreOrders.service.js";
 import Bundles from "#schemas/bundles.js";
 import Products from "#schemas/products.js";
+import { BUNDLE_CREATION_STATUSES } from "../constants/bundle/index.js";
 
 const CreateBundles = async () => {
   try {
@@ -23,7 +24,6 @@ const CreateBundles = async () => {
               numOfOrders: 10,
             });
 
-            // Check if fetching orders was successful
             if (!lastTenOrders.success) {
               logger(
                 "error",
@@ -36,7 +36,6 @@ const CreateBundles = async () => {
             let totalPrice = 0;
             const allImages = [];
 
-            // Process orders and collect product details
             lastTenOrders.data.forEach((order) => {
               order.products.forEach((product) => {
                 products.push({
@@ -101,19 +100,14 @@ const CreateBundles = async () => {
               coverImage,
             });
 
-            // Save to the database
             const bundle = await bundleObj.save();
 
-            const createdProducts = await Promise.all(
-              products.map(async (product) => {
-                try {
-                  product.bundle = bundle._id;
-                  await Products.create(product);
-                } catch (e) {
-                  logger("error", "Error when creating product", e);
-                }
-              })
-            );
+            products.map((product) => {
+              product.bundle = bundle._id;
+              return product;
+            });
+
+            await Products.insertMany(products);
 
             await Stores.updateOne(
               { _id: store._id },

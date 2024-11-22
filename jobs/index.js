@@ -2,7 +2,7 @@ import BundleCreationCron from "./store/createStoreBundles.js";
 import BundleMigrationCron from "./bundle/migrateBundles.js";
 const StartJobs = () => {
   BundleCreationCron();
-  // BundleMigrationCron();
+  BundleMigrationCron();
 };
 
 export default StartJobs;

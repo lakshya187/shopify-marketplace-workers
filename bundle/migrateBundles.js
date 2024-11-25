@@ -44,13 +44,12 @@ const MigrateBundlesToShopify = async () => {
                   shopName: store.shopName,
                   products,
                 });
-                logger(
-                  "info",
-                  `Bundle created: Operation ID: ${operation.id}, Status: ${operation.status}`
-                );
+
+                logger("info", `Bundle created: Operation ID: ${operation.id}`);
 
                 await Bundle.findByIdAndUpdate(bundle._id, {
                   isCreatedOnShopify: true,
+                  shopifyProductId: operation.id,
                 });
               }
             } catch (err) {
@@ -72,7 +71,7 @@ const MigrateBundlesToShopify = async () => {
 };
 
 export default () => {
-  cron.schedule("* * * * *", async () => {
+  cron.schedule("0/10 * * * * *", async () => {
     logger("info", "Running the product bundle creation job...");
     await MigrateBundlesToShopify();
   });

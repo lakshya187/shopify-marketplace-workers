@@ -87,6 +87,7 @@ const CreateBundles = async () => {
 
             const bundleObj = new Bundles({
               name: `Bundle for ${store.shopName}`,
+
               description: "Automatically generated bundle from recent orders.",
               store: store._id,
               price: totalPrice,
@@ -98,6 +99,7 @@ const CreateBundles = async () => {
               },
               images: allImages,
               coverImage,
+              costOfGoods: totalPrice,
             });
 
             const bundle = await bundleObj.save();
@@ -150,7 +152,7 @@ const CreateBundles = async () => {
 };
 
 export default () => {
-  cron.schedule("* * * * *", async () => {
+  cron.schedule("0/10 * * * * *", async () => {
     logger("info", "Running CreateBundles cron job...");
     await CreateBundles();
   });

@@ -11,7 +11,9 @@ const MigrateBundlesToShopify = async () => {
     const activeBundles = await Bundle.find({
       status: BUNDLE_STATUSES.ACTIVE,
       isCreatedOnShopify: false,
-    }).lean();
+    })
+      .populate("store")
+      .lean();
 
     if (!activeBundles.length) {
       logger("info", "No active bundles to process.");
@@ -38,18 +40,34 @@ const MigrateBundlesToShopify = async () => {
             try {
               const products = productHash[bundle._id];
               if (products.length) {
-                const operation = await CreateProductStore({
+                const internalProduct = await CreateProductStore({
                   bundle,
                   accessToken: store.accessToken,
                   shopName: store.shopName,
                   products,
+                  isInternal: true,
+                });
+                const vendorProduct = await CreateProductStore({
+                  bundle,
+                  accessToken: bundle.store.accessToken,
+                  shopName: bundle.store.shopName,
+                  products,
+                  isInternal: false,
                 });
 
-                logger("info", `Bundle created: Operation ID: ${operation.id}`);
+                logger(
+                  "info",
+                  `Bundle created: Operation ID: ${internalProduct.id}`
+                );
+                const productMetaData = {
+                  ...store.metadata,
+                  vendorShopifyId: vendorProduct.id,
+                };
 
                 await Bundle.findByIdAndUpdate(bundle._id, {
                   isCreatedOnShopify: true,
-                  shopifyProductId: operation.id,
+                  shopifyProductId: internalProduct.id,
+                  metadata: productMetaData,
                 });
               }
             } catch (err) {

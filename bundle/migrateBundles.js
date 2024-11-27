@@ -45,12 +45,14 @@ const MigrateBundlesToShopify = async () => {
                   accessToken: store.accessToken,
                   shopName: store.shopName,
                   products,
+                  isInternal: true,
                 });
                 const vendorProduct = await CreateProductStore({
                   bundle,
                   accessToken: bundle.store.accessToken,
                   shopName: bundle.store.shopName,
                   products,
+                  isInternal: false,
                 });
 
                 logger(

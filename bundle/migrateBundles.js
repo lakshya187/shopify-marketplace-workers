@@ -6,8 +6,17 @@ import logger from "#common-functions/logger/index.js";
 import Stores from "#schemas/stores.js";
 import { BUNDLE_STATUSES } from "../constants/bundle/index.js";
 
+let SERVICE_RUNNING = false;
+
 const MigrateBundlesToShopify = async () => {
   try {
+    if (SERVICE_RUNNING) {
+      logger("info", "Service is already running.");
+      return;
+    }
+
+    SERVICE_RUNNING = true;
+
     const activeBundles = await Bundle.find({
       status: BUNDLE_STATUSES.ACTIVE,
       isCreatedOnShopify: false,
@@ -83,17 +92,17 @@ const MigrateBundlesToShopify = async () => {
         })
       );
     }
+
+    SERVICE_RUNNING = false;
   } catch (err) {
     logger("error", "Error processing bundles", err);
+    SERVICE_RUNNING = false;
   }
 };
 
-export default () => {
-  cron.schedule("0/10 * * * * *", async () => {
-    logger("info", "Running the product bundle creation job...");
-    await MigrateBundlesToShopify();
-  });
-};
+setInterval(() => {
+  MigrateBundlesToShopify();
+}, process.env.MIGRATE_BUNDLE_WORKER_INTERVAL_MS);
 
 // utils
 const convertArrayToObject = (data, key) => {

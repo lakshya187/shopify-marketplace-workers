@@ -2,7 +2,7 @@ import cron from "node-cron";
 import logger from "../common-functions/logger/index.js";
 import Stores from "#schemas/stores.js";
 
-import GetStoreOrders from "#common-functions/shopify/getStoreOrders.service.js";
+import GetStoreOrders from "#common-functions/shopify/getStoreOrders.js";
 import Bundles from "#schemas/bundles.js";
 import Products from "#schemas/products.js";
 import { BUNDLE_CREATION_STATUSES } from "../constants/bundle/index.js";
@@ -14,7 +14,6 @@ const CreateBundles = async () => {
     }).lean();
 
     if (storesWithoutBundle?.length) {
-      // Using Promise.allSettled to process all stores
       const bundlePromises = await Promise.allSettled(
         storesWithoutBundle.map(async (store) => {
           try {

@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import Bundle from "#schemas/bundles.js";
 import Products from "#schemas/products.js";
-import CreateProductStore from "#common-functions/shopify/createStoreProducts.service.js";
+import CreateProductStore from "#common-functions/shopify/createStoreProducts.js";
 import logger from "#common-functions/logger/index.js";
 import Stores from "#schemas/stores.js";
 import { BUNDLE_STATUSES } from "../constants/bundle/index.js";

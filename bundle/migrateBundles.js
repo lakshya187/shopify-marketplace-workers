@@ -5,15 +5,16 @@ import CreateProductStore from "#common-functions/shopify/createStoreProducts.js
 import logger from "#common-functions/logger/index.js";
 import Stores from "#schemas/stores.js";
 import { BUNDLE_STATUSES } from "../constants/bundle/index.js";
+import Categories from "#schemas/categories.js";
 
 let SERVICE_RUNNING = false;
 
 const MigrateBundlesToShopify = async () => {
   try {
-    if (SERVICE_RUNNING) {
-      logger("info", "Service is already running.");
-      return;
-    }
+    // if (SERVICE_RUNNING) {
+    //   logger("info", "Service is already running.");
+    //   return;
+    // }
 
     SERVICE_RUNNING = true;
 
@@ -22,6 +23,7 @@ const MigrateBundlesToShopify = async () => {
       isCreatedOnShopify: false,
     })
       .populate("store")
+      .populate("category")
       .lean();
 
     if (!activeBundles.length) {
@@ -115,3 +117,5 @@ const convertArrayToObject = (data, key) => {
   });
   return hash;
 };
+
+export default MigrateBundlesToShopify;

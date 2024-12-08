@@ -6,6 +6,7 @@ import logger from "#common-functions/logger/index.js";
 import Stores from "#schemas/stores.js";
 import { BUNDLE_STATUSES } from "../constants/bundle/index.js";
 import Categories from "#schemas/categories.js";
+import Boxes from "#schemas/boxes.js";
 
 let SERVICE_RUNNING = false;
 
@@ -24,6 +25,7 @@ const MigrateBundlesToShopify = async () => {
     })
       .populate("store")
       .populate("category")
+      .populate("box")
       .lean();
 
     if (!activeBundles.length) {

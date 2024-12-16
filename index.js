@@ -4,6 +4,6 @@ import SyncStoreProducts from "./bundle/syncStoreProducts.js";
 const StartJobs = () => {
   // CreateStoreBundles();
   MigrateBundlesToShopify();
-  // SyncStoreProducts();
+  SyncStoreProducts();
 };
 StartJobs();

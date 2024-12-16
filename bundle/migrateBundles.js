@@ -26,21 +26,13 @@ const MigrateBundlesToShopify = async () => {
       .populate("store")
       .populate("category")
       .populate("box")
+      .populate({ path: "components.product" })
       .lean();
 
     if (!activeBundles.length) {
       logger("info", "No active bundles to process.");
       return;
     }
-    const activeBundleIds = activeBundles.map((bundle) => bundle._id);
-    const productsForActiveBundles = await Products.find({
-      bundle: { $in: activeBundleIds },
-    }).lean();
-
-    const productHash = convertArrayToObject(
-      productsForActiveBundles,
-      "bundle"
-    );
 
     logger("info", `Found ${activeBundles.length} active bundles to process.`);
     const internalStores = await Stores.find({ isInternalStore: true }).lean();
@@ -51,7 +43,7 @@ const MigrateBundlesToShopify = async () => {
         internalStores.map(async (store) => {
           const promises = activeBundles.map(async (bundle) => {
             try {
-              const products = productHash[bundle._id];
+              const { components: products } = bundle;
               if (products.length) {
                 const internalProduct = await CreateProductStore({
                   bundle,

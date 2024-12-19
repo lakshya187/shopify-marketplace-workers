@@ -42,7 +42,7 @@ const SyncStoreProducts = async () => {
     }).lean();
 
     if (!unsyncedStores || !unsyncedStores.length) {
-      logger("error", "No stores found to sync products for");
+      logger("info", "No stores found to sync products for");
       return;
     }
 

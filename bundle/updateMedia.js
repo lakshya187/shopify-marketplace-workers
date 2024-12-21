@@ -20,6 +20,7 @@ const UpdateMedia = async () => {
       accessToken: internalStore.accessToken,
       productIds: bundleIds,
       shopName: internalStore.shopName,
+      storeUrl: internalStore.storeUrl,
     });
 
     const shopifyProductMap = {};

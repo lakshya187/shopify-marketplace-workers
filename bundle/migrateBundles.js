@@ -12,11 +12,6 @@ let SERVICE_RUNNING = false;
 
 const MigrateBundlesToShopify = async () => {
   try {
-    // if (SERVICE_RUNNING) {
-    //   logger("info", "Service is already running.");
-    //   return;
-    // }
-
     SERVICE_RUNNING = true;
 
     const activeBundles = await Bundle.find({
@@ -51,6 +46,7 @@ const MigrateBundlesToShopify = async () => {
                   shopName: store.shopName,
                   products,
                   isInternal: true,
+                  storeUrl: store.storeUrl,
                 });
                 const vendorProduct = await CreateProductStore({
                   bundle,
@@ -58,6 +54,7 @@ const MigrateBundlesToShopify = async () => {
                   shopName: bundle.store.shopName,
                   products,
                   isInternal: false,
+                  storeUrl: bundle.store.storeUrl,
                 });
 
                 logger(

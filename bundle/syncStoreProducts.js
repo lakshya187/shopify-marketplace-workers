@@ -3,7 +3,7 @@ import SearchProductOnShopify from "#common-functions/shopify/getStoreProducts.j
 import Products from "#schemas/products.js";
 import Stores from "#schemas/stores.js";
 
-const fetchAllProducts = async ({ accessToken, shopName }) => {
+const fetchAllProducts = async ({ accessToken, shopName, shopUrl }) => {
   let allProducts = [];
   let hasNextPage = true;
   let cursor = null;
@@ -11,10 +11,10 @@ const fetchAllProducts = async ({ accessToken, shopName }) => {
   while (hasNextPage) {
     const { data, success, error, pageInfo } = await SearchProductOnShopify({
       accessToken,
-      shopName,
       numOfProducts: 20,
       searchTerm: "",
       cursor,
+      storeUrl: shopUrl,
     });
 
     if (!success) {
@@ -51,7 +51,8 @@ const SyncStoreProducts = async () => {
         try {
           const allProducts = await fetchAllProducts({
             accessToken: store.accessToken,
-            shopName: store.shopName,
+
+            shopUrl: store.storeUrl,
           });
 
           const storeProductObjs = allProducts.map((product) => {

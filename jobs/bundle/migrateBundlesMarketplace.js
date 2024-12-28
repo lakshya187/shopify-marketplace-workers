@@ -3,7 +3,7 @@ import Bundle from "#schemas/bundles.js";
 import CreateProductStore from "#common-functions/shopify/createStoreProducts.js";
 import logger from "#common-functions/logger/index.js";
 import Stores from "#schemas/stores.js";
-import { BUNDLE_STATUSES } from "../constants/bundle/index.js";
+import { BUNDLE_STATUSES } from "../../constants/bundle/index.js";
 import StoreDetails from "#schemas/storeDetails.js";
 import categories from "#schemas/categories.js";
 import box from "#schemas/boxes.js";

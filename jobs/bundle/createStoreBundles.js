@@ -1,11 +1,11 @@
 import cron from "node-cron";
-import logger from "../common-functions/logger/index.js";
+import logger from "#common-functions/logger/index.js";
 import Stores from "#schemas/stores.js";
 
 import GetStoreOrders from "#common-functions/shopify/getStoreOrders.js";
 import Bundles from "#schemas/bundles.js";
 import Products from "#schemas/products.js";
-import { BUNDLE_CREATION_STATUSES } from "../constants/bundle/index.js";
+import { BUNDLE_CREATION_STATUSES } from "../../constants/bundle/index.js";
 
 const CreateBundles = async () => {
   try {

@@ -1,11 +1,13 @@
-import CreateStoreBundles from "./bundle/createStoreBundles.js";
-import MigrateBundlesToShopify from "./bundle/migrateBundles.js";
-import SyncStoreProducts from "./bundle/syncStoreProducts.js";
-import UpdateMedia from "./bundle/updateMedia.js";
+// import CreateStoreBundles from "./jobs/bundle/createStoreBundles.js";
+// import MigrateBundlesToShopify from "./jobs/bundle/migrateBundlesMarketplace.js";
+// import SyncStoreProducts from "./jobs/products/syncStoreProducts.js";
+// import UpdateMedia from "./jobs/bundle/updateMedia.js";
+import MigrateProductsToBQ from "./jobs/products/migrateProductsBigQuery.js";
 const StartJobs = () => {
   // CreateStoreBundles();
-  MigrateBundlesToShopify();
-  SyncStoreProducts();
-  UpdateMedia();
+  // MigrateBundlesToShopify();
+  // SyncStoreProducts();
+  // UpdateMedia();
+  MigrateProductsToBQ();
 };
 StartJobs();

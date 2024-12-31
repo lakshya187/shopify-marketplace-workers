@@ -7,6 +7,7 @@ import { BUNDLE_STATUSES } from "../../constants/bundle/index.js";
 import StoreDetails from "#schemas/storeDetails.js";
 import categories from "#schemas/categories.js";
 import box from "#schemas/boxes.js";
+import products from "#schemas/products.js";
 
 let SERVICE_RUNNING = false;
 
@@ -99,7 +100,7 @@ const MigrateBundlesToShopify = async () => {
 };
 
 setInterval(() => {
-  MigrateBundlesToShopify();
+  // MigrateBundlesToShopify();
 }, process.env.MIGRATE_BUNDLE_WORKER_INTERVAL_MS);
 
 // utils

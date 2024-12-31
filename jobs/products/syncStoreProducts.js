@@ -118,6 +118,6 @@ const SyncStoreProducts = async () => {
 
 setInterval(() => {
   SyncStoreProducts();
-}, process.env.MIGRATE_BUNDLE_WORKER_INTERVAL_MS);
+}, process.env.SYNC_BUNDLE_WORKER_INTERVAL_MS);
 
 export default SyncStoreProducts;

@@ -100,7 +100,7 @@ const MigrateBundlesToShopify = async () => {
 };
 
 setInterval(() => {
-  // MigrateBundlesToShopify();
+  MigrateBundlesToShopify();
 }, process.env.MIGRATE_BUNDLE_WORKER_INTERVAL_MS);
 
 // utils

@@ -1,7 +1,8 @@
 import logger from "#common-functions/logger/index.js";
-import SearchProductOnShopify from "#common-functions/shopify/getStoreProducts.js";
 import Products from "#schemas/products.js";
 import Stores from "#schemas/stores.js";
+import executeShopifyQueries from "#common-functions/shopify/execute.js";
+import { SEARCH_PRODUCTS } from "#common-functions/shopify/queries.js";
 
 const fetchAllProducts = async ({ accessToken, shopUrl }) => {
   let allProducts = [];
@@ -9,20 +10,54 @@ const fetchAllProducts = async ({ accessToken, shopUrl }) => {
   let cursor = null;
 
   while (hasNextPage) {
-    const { data, success, error, pageInfo } = await SearchProductOnShopify({
-      accessToken,
-      numOfProducts: 250,
-      searchTerm: "",
-      cursor,
-      storeUrl: shopUrl,
-    });
-
-    if (!success) {
-      logger("error", `Error fetching products from Shopify: ${error}`);
+    try {
+      const { data, pageInfo } = await executeShopifyQueries({
+        accessToken,
+        query: SEARCH_PRODUCTS,
+        storeUrl,
+        variables: {
+          first: 250,
+          after: cursor, // Pagination cursor
+        },
+        callback: (result) => {
+          const { edges, pageInfo } = result.data.products;
+          const formattedData = edges.map(({ node }) => ({
+            id: node.id,
+            title: node.title,
+            description: node.description,
+            descriptionHtml: node.descriptionHtml,
+            vendor: node.vendor,
+            productType: node.productType,
+            tags: node.tags,
+            customProductType: node.customProductType,
+            isGiftCard: node.isGiftCard,
+            onlineStoreUrl: node.onlineStoreUrl,
+            images: node.images.edges.map(({ node: imageNode }) => ({
+              src: imageNode.src,
+              altText: imageNode.altText || null,
+            })),
+            variants: node.variants.edges.map(({ node: variantNode }) => ({
+              id: variantNode.id,
+              title: variantNode.title,
+              price: variantNode.price,
+              sku: variantNode.sku || null,
+              inventoryQuantity: variantNode.inventoryQuantity || null,
+            })),
+          }));
+          return {
+            data: formattedData,
+            pageInfo,
+          };
+        },
+      });
+    } catch (e) {
+      logger(
+        "error",
+        `[sync-store-products [fetch-all-products]] Error fetching products from Shopify: ${error}`
+      );
       throw new Error(error);
     }
 
-    // const { edges } = data.products;
     allProducts = [...allProducts, ...data];
     hasNextPage = pageInfo.hasNextPage;
     cursor = pageInfo.endCursor;

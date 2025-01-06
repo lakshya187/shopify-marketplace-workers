@@ -1,7 +1,8 @@
 import logger from "#common-functions/logger/index.js";
-import GetMultipleProducts from "#common-functions/shopify/getMultipleProductsWithid.js";
 import Bundles from "#schemas/bundles.js";
 import Stores from "#schemas/stores.js";
+import executeShopifyQueries from "#common-functions/shopify/execute.js";
+import { GET_MULTIPLE_PRODUCTS } from "#common-functions/shopify/queries.js";
 
 const UpdateMedia = async () => {
   logger("info", "Running CRON to update the product media.");
@@ -16,12 +17,34 @@ const UpdateMedia = async () => {
       return;
     }
     const bundleIds = bundlesToProcess.map((b) => b.shopifyProductId);
-    const allShopifyProducts = await GetMultipleProducts({
-      accessToken: internalStore.accessToken,
-      productIds: bundleIds,
-      shopName: internalStore.shopName,
-      storeUrl: internalStore.storeUrl,
-    });
+    let allShopifyProducts;
+    try {
+      allShopifyProducts = await executeShopifyQueries({
+        accessToken: internalStore.accessToken,
+        storeUrl: internalStore.storeUrl,
+        variables: {
+          ids: bundleIds,
+        },
+        query: GET_MULTIPLE_PRODUCTS,
+
+        callback: (result) => {
+          const products = result?.data?.nodes;
+          return products
+            .map((product) => {
+              if (!product) return null;
+              return {
+                images: product.images.edges.map(({ node }) => ({
+                  src: node.src,
+                  altText: node.altText || null,
+                })),
+              };
+            })
+            .filter(Boolean);
+        },
+      });
+    } catch (e) {
+      logger("error", "[update-media] Could not fetch multiple products");
+    }
 
     const shopifyProductMap = {};
     allShopifyProducts.forEach((product) => {

@@ -66,7 +66,7 @@ const MigrateProductsToBQ = async () => {
   }
 };
 setInterval(() => {
-  MigrateProductsToBQ();
+  // MigrateProductsToBQ();
 }, process.env.MIGRATE_BUNDLE_WORKER_INTERVAL_MS);
 
 export default MigrateProductsToBQ;

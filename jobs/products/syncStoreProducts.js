@@ -8,16 +8,18 @@ const fetchAllProducts = async ({ accessToken, shopUrl }) => {
   let allProducts = [];
   let hasNextPage = true;
   let cursor = null;
+  let realData = undefined;
+  let realPageInfo = undefined;
 
   while (hasNextPage) {
     try {
       const { data, pageInfo } = await executeShopifyQueries({
         accessToken,
         query: SEARCH_PRODUCTS,
-        storeUrl,
+        storeUrl: shopUrl,
         variables: {
           first: 250,
-          after: cursor, // Pagination cursor
+          after: cursor,
         },
         callback: (result) => {
           const { edges, pageInfo } = result.data.products;
@@ -50,6 +52,9 @@ const fetchAllProducts = async ({ accessToken, shopUrl }) => {
           };
         },
       });
+
+      realData = data;
+      realPageInfo = pageInfo;
     } catch (e) {
       logger(
         "error",
@@ -58,9 +63,11 @@ const fetchAllProducts = async ({ accessToken, shopUrl }) => {
       throw new Error(error);
     }
 
-    allProducts = [...allProducts, ...data];
-    hasNextPage = pageInfo.hasNextPage;
-    cursor = pageInfo.endCursor;
+    allProducts = [...allProducts, ...realData];
+    hasNextPage = realPageInfo.hasNextPage;
+    cursor = realPageInfo.endCursor;
+
+    await sleep(1000);
   }
 
   return allProducts;
@@ -84,6 +91,9 @@ const SyncStoreProducts = async () => {
     await Promise.all(
       unsyncedStores.map(async (store) => {
         try {
+          if (!store?.accessToken) {
+            throw new Error("No access token");
+          }
           const allProducts = await fetchAllProducts({
             accessToken: store.accessToken,
 
@@ -154,5 +164,11 @@ const SyncStoreProducts = async () => {
 setInterval(() => {
   SyncStoreProducts();
 }, process.env.SYNC_BUNDLE_WORKER_INTERVAL_MS);
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 export default SyncStoreProducts;

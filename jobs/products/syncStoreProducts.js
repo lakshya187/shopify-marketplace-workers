@@ -4,20 +4,31 @@ import Stores from "#schemas/stores.js";
 import executeShopifyQueries from "#common-functions/shopify/execute.js";
 import { SEARCH_PRODUCTS } from "#common-functions/shopify/queries.js";
 
+const processingTemp = {};
 const fetchAllProducts = async ({ accessToken, shopUrl }) => {
+  if (!processingTemp[shopUrl]) {
+    processingTemp[shopUrl] = true;
+  } else {
+    logger("error", "Service already process the store");
+    return;
+  }
+
   let allProducts = [];
   let hasNextPage = true;
   let cursor = null;
+  let realData = undefined;
+  let realPageInfo = undefined;
 
+  logger("info", "Starting to fetch products");
   while (hasNextPage) {
     try {
       const { data, pageInfo } = await executeShopifyQueries({
         accessToken,
         query: SEARCH_PRODUCTS,
-        storeUrl,
+        storeUrl: shopUrl,
         variables: {
           first: 250,
-          after: cursor, // Pagination cursor
+          after: cursor,
         },
         callback: (result) => {
           const { edges, pageInfo } = result.data.products;
@@ -44,12 +55,19 @@ const fetchAllProducts = async ({ accessToken, shopUrl }) => {
               inventoryQuantity: variantNode.inventoryQuantity || null,
             })),
           }));
+          logger(
+            "info",
+            `Successfully fetched: ${formattedData.length} products.`
+          );
           return {
             data: formattedData,
             pageInfo,
           };
         },
       });
+
+      realData = data;
+      realPageInfo = pageInfo;
     } catch (e) {
       logger(
         "error",
@@ -58,11 +76,13 @@ const fetchAllProducts = async ({ accessToken, shopUrl }) => {
       throw new Error(error);
     }
 
-    allProducts = [...allProducts, ...data];
-    hasNextPage = pageInfo.hasNextPage;
-    cursor = pageInfo.endCursor;
-  }
+    allProducts = [...allProducts, ...realData];
+    hasNextPage = realPageInfo.hasNextPage;
+    cursor = realPageInfo.endCursor;
 
+    await sleep(1000);
+  }
+  delete processingTemp[shopUrl];
   return allProducts;
 };
 
@@ -82,63 +102,71 @@ const SyncStoreProducts = async () => {
     }
 
     await Promise.all(
-      unsyncedStores.map(async (store) => {
-        try {
-          const allProducts = await fetchAllProducts({
-            accessToken: store.accessToken,
+      unsyncedStores
+        .map(async (store) => {
+          try {
+            if (!store?.accessToken) {
+              throw new Error("No access token");
+            }
+            const allProducts = await fetchAllProducts({
+              accessToken: store.accessToken,
 
-            shopUrl: store.storeUrl,
-          });
+              shopUrl: store.storeUrl,
+            });
 
-          const storeProductObjs = allProducts.map((product) => {
-            let totalInventory = 0;
-            product.variants.forEach(
-              (v) => (totalInventory += Number(v.inventoryQuantity ?? 0))
+            if (!allProducts || !allProducts.length) {
+              return;
+            }
+            const storeProductObjs = allProducts.map((product) => {
+              let totalInventory = 0;
+              product.variants.forEach(
+                (v) => (totalInventory += Number(v.inventoryQuantity ?? 0))
+              );
+              return {
+                productId: product.id,
+                title: product.title,
+                bodyHtml: product.descriptionHtml || "",
+                createdAt: product.createdAt || new Date(),
+                updatedAt: product.updatedAt || new Date(),
+                handle: product.handle || "",
+                description: product.description || "",
+                descriptionHtml: product.descriptionHtml || "",
+                vendor: product.vendor || "",
+                productType: product.productType || "",
+                tags: product.tags || [],
+                totalInventory: totalInventory,
+                totalVariants: product.variants?.length || 0,
+                onlineStoreUrl: product.onlineStoreUrl || "",
+                customProductType: product.customProductType || "",
+                isGiftCard: product.isGiftCard || false,
+                images: product.images || [],
+                variants: product.variants || [],
+                store: store._id,
+                length: "",
+                width: "",
+                weight: "",
+                height: "",
+              };
+            });
+
+            await Promise.all([
+              Products.insertMany(storeProductObjs),
+              Stores.findByIdAndUpdate(store._id, { isProductsSynced: true }),
+            ]);
+
+            logger(
+              "info",
+              `Successfully synced products for store: ${store.shopName}`
             );
-            return {
-              productId: product.id,
-              title: product.title,
-              bodyHtml: product.descriptionHtml || "",
-              createdAt: product.createdAt || new Date(),
-              updatedAt: product.updatedAt || new Date(),
-              handle: product.handle || "",
-              description: product.description || "",
-              descriptionHtml: product.descriptionHtml || "",
-              vendor: product.vendor || "",
-              productType: product.productType || "",
-              tags: product.tags || [],
-              totalInventory: totalInventory,
-              totalVariants: product.variants?.length || 0,
-              onlineStoreUrl: product.onlineStoreUrl || "",
-              customProductType: product.customProductType || "",
-              isGiftCard: product.isGiftCard || false,
-              images: product.images || [],
-              variants: product.variants || [],
-              store: store._id,
-              length: "",
-              width: "",
-              weight: "",
-              height: "",
-            };
-          });
-
-          await Promise.all([
-            Products.insertMany(storeProductObjs),
-            Stores.findByIdAndUpdate(store._id, { isProductsSynced: true }),
-          ]);
-
-          logger(
-            "info",
-            `Successfully synced products for store: ${store.shopName}`
-          );
-        } catch (error) {
-          logger(
-            "error",
-            `Error syncing products for store: ${store.shopName}`,
-            error
-          );
-        }
-      })
+          } catch (error) {
+            logger(
+              "error",
+              `Error syncing products for store: ${store.shopName}`,
+              error
+            );
+          }
+        })
+        .filter(Boolean)
     );
 
     logger("info", "Completed syncing products for all unsynced stores.");
@@ -154,5 +182,11 @@ const SyncStoreProducts = async () => {
 setInterval(() => {
   SyncStoreProducts();
 }, process.env.SYNC_BUNDLE_WORKER_INTERVAL_MS);
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 export default SyncStoreProducts;

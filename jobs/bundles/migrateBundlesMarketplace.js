@@ -1,4 +1,4 @@
-// import cron from "node-cron";
+// dont remove the unused imports
 import Bundle from "#schemas/bundles.js";
 import logger from "#common-functions/logger/index.js";
 import Stores from "#schemas/stores.js";
@@ -18,12 +18,10 @@ import {
   PRODUCT_VARIANTS_CREATE,
 } from "#common-functions/shopify/queries.js";
 
-let SERVICE_RUNNING = false;
+const processingTemp = {};
 
 const MigrateBundlesToShopify = async () => {
   try {
-    SERVICE_RUNNING = true;
-
     const activeBundles = await Bundle.find({
       status: BUNDLE_STATUSES.ACTIVE,
       isCreatedOnShopify: false,
@@ -48,6 +46,12 @@ const MigrateBundlesToShopify = async () => {
         internalStores.map(async (store) => {
           const promises = activeBundles.map(async (bundle) => {
             try {
+              if (!processingTemp[bundle._id]) {
+                processingTemp[bundle._id] = true;
+              } else {
+                logger("error", "Already processing the bundle");
+                return;
+              }
               const [storeDetails] = await StoreDetails.find({
                 store: bundle.store._id,
               }).lean();
@@ -82,16 +86,6 @@ const MigrateBundlesToShopify = async () => {
                   }
                 });
 
-                /*
-                {
-                mapping : {
-              [MarketplaceVariantId] : {
-              name : [string]
-              vendorVariant : string
-              }
-                }
-                } 
-                */
                 const productMetaData = {
                   ...store.metadata,
                   vendorShopifyId: vendorProduct.product.id,
@@ -103,12 +97,14 @@ const MigrateBundlesToShopify = async () => {
                   shopifyProductId: internalProduct.product.id,
                   metadata: productMetaData,
                 });
+                delete processingTemp[bundle._id];
               }
               logger(
                 "info",
                 `Successfully created the bundle on both merchant and marketplace.`
               );
             } catch (err) {
+              delete processingTemp[bundle._id];
               logger(
                 "error",
                 `Failed to create product bundle for ${bundle._id}`,
@@ -121,11 +117,8 @@ const MigrateBundlesToShopify = async () => {
         })
       );
     }
-
-    SERVICE_RUNNING = false;
   } catch (err) {
     logger("error", "Error processing bundles", err);
-    SERVICE_RUNNING = false;
   }
 };
 

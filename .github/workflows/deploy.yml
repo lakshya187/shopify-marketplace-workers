@@ -27,11 +27,10 @@ jobs:
           echo "Starting deployment..."
 
           ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
-            # Navigate to your app directory
             cd giftkart-crons/
             git checkout staging
-            cd common-functions && git checkout staging && cd ..
-            cd schemas && git checkout staging && cd ..
+            cd common-functions && git checkout staging && git pull origin staging && cd ..
+            cd schemas && git checkout staging git pull origin staging && cd ..
 
             # Pull latest changes
             git pull origin staging

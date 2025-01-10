@@ -27,52 +27,49 @@ jobs:
           echo "Starting deployment..."
 
           ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
-            cd giftkart-crons/
-            git checkout staging
-            cd common-functions && git checkout staging && git pull origin staging && cd ..
-            cd schemas && git checkout staging git pull origin staging && cd ..
+          cd giftkart-crons/
+          git checkout staging
+                
+          cd common-functions
+          git checkout staging
+          git pull origin staging
+          cd ..
+                
+          cd schemas
+          git checkout staging
+          git pull origin staging
+          cd ..
+                
+          # Pull latest changes for the main repository
+          git pull origin staging
 
-            # Pull latest changes
-            git pull origin staging
+          # Install dependencies
+          npm install
 
-            # Install dependencies
-            npm install
+          # List all running PM2 processes
+          pm2 list
 
-            # List all running PM2 processes
-            pm2 list
+          # Restarting the migrate-bundle-worker
+          MIGRATE_BUNDLES="migrate-bundles-marketplace"
+          MIGRATE_BUNDLES_ID=$(pm2 list | grep "$MIGRATE_BUNDLES" | awk '{print $2}')
+          if [ -n "$MIGRATE_BUNDLES_ID" ]; then
+            echo "Restarting migrate-bundles-marketplace: $MIGRATE_BUNDLES_ID"
+            pm2 restart $MIGRATE_BUNDLES_ID
+          else
+            echo "migrate-bundles-marketplace process not found!"
+          fi
+          # Restarting the sync products worker
+          SYNC_STORE_PRODUCTS="sync-store-products-worker"
+          SYNC_STORE_PRODUCTS_ID=$(pm2 list | grep "$SYNC_STORE_PRODUCTS" | awk '{print $2}')
+          if [ -n "$SYNC_STORE_PRODUCTS_ID" ]; then
+            echo "Restarting sync-store-products-worker: $SYNC_STORE_PRODUCTS_ID"
+            pm2 restart $SYNC_STORE_PRODUCTS_ID
+          else
+            echo "sync-store-products-worker process not found!"
+          fi
 
-            # Restarting the migrate-bundle-worker
-            MIGRATE_BUNDLES="migrate-bundles-marketplace"
-            MIGRATE_BUNDLES_ID=$(pm2 list | grep "$MIGRATE_BUNDLES" | awk '{print $2}')
-            if [ -n "$MIGRATE_BUNDLES_ID" ]; then
-              echo "Restarting migrate-bundles-marketplace: $MIGRATE_BUNDLES_ID"
-              pm2 restart $MIGRATE_BUNDLES_ID
-            else
-              echo "migrate-bundles-marketplace process not found!"
-            fi
-
-            # Restarting the sync products worker
-            SYNC_STORE_PRODUCTS="sync-store-products-worker"
-            SYNC_STORE_PRODUCTS_ID=$(pm2 list | grep "$SYNC_STORE_PRODUCTS" | awk '{print $2}')
-            if [ -n "$SYNC_STORE_PRODUCTS_ID" ]; then
-              echo "Restarting sync-store-products-worker: $SYNC_STORE_PRODUCTS_ID"
-              pm2 restart $SYNC_STORE_PRODUCTS_ID
-            else
-              echo "sync-store-products-worker process not found!"
-            fi
-
-            # Restarting the update media worker
-            MEDIA_UPDATE="update-media-worker"
-            MEDIA_UPDATE_ID=$(pm2 list | grep "$MEDIA_UPDATE" | awk '{print $2}')
-            if [ -n "$MEDIA_UPDATE_ID" ]; then
-              echo "Restarting update-media-worker: $MEDIA_UPDATE_ID"
-              pm2 restart $MEDIA_UPDATE_ID
-            else
-              echo "update-media-worker process not found!"
-            fi
-
-            # Save the updated PM2 process list
-            pm2 save
+          # Save the updated PM2 process list
+          pm2 save
           EOF
 
       - name: Confirm Deployment

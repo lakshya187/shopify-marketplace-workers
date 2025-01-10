@@ -74,6 +74,7 @@ const MigrateBundlesToShopify = async () => {
                   isInternal: false,
                   storeUrl: bundle.store.storeUrl,
                   storeLogo: storeDetails?.logo ?? "",
+                  isVendorProduct: true,
                 });
 
                 const variantMapping = {};
@@ -137,13 +138,14 @@ const CreateStoreProduct = async ({
   products,
   storeLogo,
   storeUrl,
+  isVendorProduct,
 }) => {
   // creating the product
   const media = [];
   if (bundle.coverImage) {
     media.push({
       mediaContentType: "IMAGE",
-      originalSource: bundle.coverImage,
+      originalSource: bundle.coverImage.url,
       alt: `Cover image for ${bundle.name}`,
     });
   }
@@ -151,7 +153,7 @@ const CreateStoreProduct = async ({
     bundle.images.forEach((imageUrl, index) => {
       media.push({
         mediaContentType: "IMAGE",
-        originalSource: imageUrl,
+        originalSource: imageUrl.url,
         alt: `Additional image ${index + 1} for ${bundle.name}`,
       });
     });
@@ -172,7 +174,7 @@ const CreateStoreProduct = async ({
       descriptionHtml: bundle.description || "Bundle created from application.",
       tags: bundle.tags || [],
       vendor: bundle.vendor ?? "",
-      status: bundle.status?.toUpperCase(),
+      status: isVendorProduct ? "DRAFT" : "ACTIVE",
       ...category,
       productOptions: [
         {
@@ -279,11 +281,16 @@ const CreateStoreProduct = async ({
               id: node.id,
               title: node.title,
             });
+            const netPrice = Number(bundle.price) - Number(bundle.discount);
             return {
               id: node.id,
-              price: isPackaging
+              compareAtPrice: isPackaging
                 ? bundle.price + (bundle.box?.price ?? 0)
                 : bundle.price,
+              price: isPackaging
+                ? netPrice + (bundle.box?.price ?? 0)
+                : netPrice,
+
               inventoryItem: {
                 tracked: bundle.trackInventory,
                 sku: isPackaging ? `${bundle.sku}_P` : bundle.sku,

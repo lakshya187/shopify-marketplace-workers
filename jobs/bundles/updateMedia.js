@@ -11,7 +11,10 @@ const UpdateMedia = async () => {
       isMediaSynced: false,
       isCreatedOnShopify: true,
     }).lean();
-    const internalStore = await Stores.findOne({ isInternalStore: true });
+    const internalStore = await Stores.findOne({
+      isInternalStore: true,
+      isActive: true,
+    });
     if (!bundlesToProcess) {
       logger("info", "No bundles found to process");
       return;
@@ -33,10 +36,11 @@ const UpdateMedia = async () => {
             .map((product) => {
               if (!product) return null;
               return {
-                images: product.images.edges.map(({ node }) => ({
-                  src: node.src,
-                  altText: node.altText || null,
+                images: product.media.edges.map(({ node }) => ({
+                  shopifyId: node.id,
+                  url: node.preview?.image?.url,
                 })),
+                id: product.id,
               };
             })
             .filter(Boolean);
@@ -44,6 +48,7 @@ const UpdateMedia = async () => {
       });
     } catch (e) {
       logger("error", "[update-media] Could not fetch multiple products");
+      throw new Error(e);
     }
 
     const shopifyProductMap = {};
@@ -55,10 +60,9 @@ const UpdateMedia = async () => {
         const shopifyProduct = shopifyProductMap[bundle.shopifyProductId];
         if (shopifyProduct) {
           const { images } = shopifyProduct;
-          const imageStrings = images.map((i) => i.src).filter(Boolean);
           const updateObj = {
-            coverImage: imageStrings[0],
-            images: imageStrings.slice(1),
+            coverImage: images[0],
+            images: images.slice(1),
             isMediaSynced: true,
           };
           return Bundles.findOneAndUpdate(bundle._id, updateObj);
@@ -72,7 +76,7 @@ const UpdateMedia = async () => {
   }
 };
 setInterval(() => {
-  UpdateMedia();
+  // UpdateMedia();
 }, 24 * 60 * 60 * 1000); // run once a day.
 
 export default UpdateMedia;

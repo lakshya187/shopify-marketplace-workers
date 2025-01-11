@@ -1,0 +1,75 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up SSH agent
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST_PROD }}
+          EC2_USER: ${{ secrets.EC2_USER_PROD }}
+        run: |
+          echo "Starting deployment..."
+
+          ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
+          cd giftkart-crons/
+                
+          cd common-functions
+          git checkout main
+          git pull origin main
+          cd ..
+                
+          cd schemas
+          git checkout main
+          git pull origin main
+          cd ..
+                
+          # Pull latest changes for the main repository
+          git pull origin main
+
+          # Install dependencies
+          npm install
+
+          # List all running PM2 processes
+          pm2 list
+
+          # Restarting the migrate-bundle-worker
+          MIGRATE_BUNDLES="migrate-bundles-marketplace"
+          MIGRATE_BUNDLES_ID=$(pm2 list | grep "$MIGRATE_BUNDLES" | awk '{print $2}')
+          if [ -n "$MIGRATE_BUNDLES_ID" ]; then
+            echo "Restarting migrate-bundles-marketplace: $MIGRATE_BUNDLES_ID"
+            pm2 restart $MIGRATE_BUNDLES_ID
+          else
+            echo "migrate-bundles-marketplace process not found!"
+          fi
+          # Restarting the sync products worker
+          SYNC_STORE_PRODUCTS="sync-store-products"
+          SYNC_STORE_PRODUCTS_ID=$(pm2 list | grep "$SYNC_STORE_PRODUCTS" | awk '{print $2}')
+          if [ -n "$SYNC_STORE_PRODUCTS_ID" ]; then
+            echo "Restarting sync-store-products-worker: $SYNC_STORE_PRODUCTS_ID"
+            pm2 restart $SYNC_STORE_PRODUCTS_ID
+          else
+            echo "sync-store-products-worker process not found!"
+          fi
+
+          # Save the updated PM2 process list
+          pm2 save
+          EOF
+
+      - name: Confirm Deployment
+        run: echo "Deployment completed successfully!"

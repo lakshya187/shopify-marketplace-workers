@@ -227,7 +227,6 @@ const CreateStoreProduct = async ({
   }
   // updating the default variant
   let inventoryPolicy = "";
-  const skuObj = {};
   if (bundle.trackInventory) {
     inventoryPolicy = "DENY";
   } else {
@@ -282,15 +281,14 @@ const CreateStoreProduct = async ({
               id: node.id,
               title: node.title,
             });
-            const netPrice = Number(bundle.price) - Number(bundle.discount);
             return {
               id: node.id,
               compareAtPrice: isPackaging
+                ? Number(bundle.compareAtPrice) + (bundle.box?.price ?? 0)
+                : bundle.compareAtPrice,
+              price: isPackaging
                 ? bundle.price + (bundle.box?.price ?? 0)
                 : bundle.price,
-              price: isPackaging
-                ? netPrice + (bundle.box?.price ?? 0)
-                : netPrice,
 
               inventoryItem: {
                 tracked: bundle.trackInventory,

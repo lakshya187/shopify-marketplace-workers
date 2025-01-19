@@ -8,3 +8,7 @@ export const BUNDLE_CREATION_STATUSES = {
   PROCESSING: "processing",
   COMPLETED: "completed",
 };
+
+export const BUNDLE_PACKAGING_VARIANT = "With Gift box";
+export const BUNDLE_WITHOUT_PACKAGING_VARIANT = "Without Gift Box";
+export const BUNDLE_PACKAGING_NAMESPACE = "Packaging";

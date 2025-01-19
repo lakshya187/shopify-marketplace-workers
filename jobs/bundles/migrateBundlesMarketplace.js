@@ -2,7 +2,12 @@
 import Bundle from "#schemas/bundles.js";
 import logger from "#common-functions/logger/index.js";
 import Stores from "#schemas/stores.js";
-import { BUNDLE_STATUSES } from "../../constants/bundle/index.js";
+import {
+  BUNDLE_PACKAGING_NAMESPACE,
+  BUNDLE_PACKAGING_VARIANT,
+  BUNDLE_STATUSES,
+  BUNDLE_WITHOUT_PACKAGING_VARIANT,
+} from "../../constants/bundle/index.js";
 import StoreDetails from "#schemas/storeDetails.js";
 import categories from "#schemas/categories.js";
 import box from "#schemas/boxes.js";
@@ -17,6 +22,7 @@ import {
   PRODUCT_VARIANT_BULK_UPDATE,
   PRODUCT_VARIANTS_CREATE,
 } from "#common-functions/shopify/queries.js";
+import StoreBoxes from "#schemas/storeBoxes.js";
 
 const processingTemp = {};
 
@@ -55,6 +61,9 @@ const MigrateBundlesToShopify = async () => {
               const [storeDetails] = await StoreDetails.find({
                 store: bundle.store._id,
               }).lean();
+              const storeInventory = await StoreBoxes.findOne({
+                store: bundle.store._id,
+              }).lean();
               const { components: products } = bundle;
               if (products.length) {
                 const internalProduct = await CreateStoreProduct({
@@ -65,6 +74,7 @@ const MigrateBundlesToShopify = async () => {
                   isInternal: true,
                   storeUrl: store.storeUrl,
                   storeLogo: storeDetails?.logo ?? "",
+                  storeInventory: storeInventory?.inventory,
                 });
                 const vendorProduct = await CreateStoreProduct({
                   bundle,
@@ -75,6 +85,7 @@ const MigrateBundlesToShopify = async () => {
                   storeUrl: bundle.store.storeUrl,
                   storeLogo: storeDetails?.logo ?? "",
                   isVendorProduct: true,
+                  storeInventory: storeInventory?.inventory,
                 });
 
                 const variantMapping = {};
@@ -125,7 +136,7 @@ const MigrateBundlesToShopify = async () => {
 };
 
 setInterval(() => {
-  MigrateBundlesToShopify();
+  // MigrateBundlesToShopify();
 }, process.env.MIGRATE_BUNDLE_WORKER_INTERVAL_MS);
 
 // utils
@@ -140,6 +151,7 @@ const CreateStoreProduct = async ({
   storeLogo,
   storeUrl,
   isVendorProduct,
+  storeInventory,
 }) => {
   // creating the product
   const media = [];
@@ -168,7 +180,6 @@ const CreateStoreProduct = async ({
   if (bundle?.category?.category?.id) {
     category["category"] = bundle.category.category.id;
   }
-  const PACKAGING_OPTION = "Packaging";
   const variables = {
     input: {
       title: bundle.name,
@@ -179,15 +190,14 @@ const CreateStoreProduct = async ({
       ...category,
       productOptions: [
         {
-          name: PACKAGING_OPTION,
+          name: BUNDLE_PACKAGING_NAMESPACE,
           values: [
             {
-              name: "With Packaging",
+              name: BUNDLE_WITHOUT_PACKAGING_VARIANT,
             },
           ],
         },
       ],
-
       metafields: [
         {
           namespace: "custom",
@@ -232,37 +242,46 @@ const CreateStoreProduct = async ({
   } else {
     inventoryPolicy = "CONTINUE";
   }
-
-  try {
-    await executeShopifyQueries({
-      accessToken,
-      query: PRODUCT_VARIANTS_CREATE,
-      storeUrl,
-      variables: {
-        productId: product.id,
-        variants: [
-          {
-            optionValues: [
-              {
-                name: "Without Packaging",
-                optionName: PACKAGING_OPTION,
-              },
-            ],
-          },
-        ],
-      },
-    });
-  } catch (e) {
-    logger(
-      "error",
-      `[migrate-bundles-marketplace[create-store-product]] Could add the product packaging option`,
-      e
+  const isPackagingAvailable =
+    bundle.box &&
+    storeInventory.find(
+      (inventory) => inventory.box.toString() === bundle.box._id.toString()
     );
-    return;
+
+  if (isPackagingAvailable && isPackagingAvailable.remaining) {
+    try {
+      await executeShopifyQueries({
+        accessToken,
+        query: PRODUCT_VARIANTS_CREATE,
+        storeUrl,
+        variables: {
+          productId: product.id,
+          variants: [
+            {
+              optionValues: [
+                {
+                  name: BUNDLE_PACKAGING_VARIANT,
+                  optionName: BUNDLE_PACKAGING_NAMESPACE,
+                },
+              ],
+            },
+          ],
+        },
+      });
+    } catch (e) {
+      logger(
+        "error",
+        `[migrate-bundles-marketplace[create-store-product]] Could add the product packaging option`,
+        e
+      );
+      return;
+    }
   }
+
   let variants;
   let variantIds = [];
   const variantMapping = [];
+  let packagingVariantId = "";
   try {
     variants = await executeShopifyQueries({
       accessToken,
@@ -275,12 +294,17 @@ const CreateStoreProduct = async ({
         const product = result?.data?.product;
         return {
           variants: product.variants.edges.map(({ node }) => {
-            const isPackaging = node.title === "With Packaging";
+            const isPackaging = node.title === BUNDLE_PACKAGING_VARIANT;
+
             variantIds.push(node.id);
             variantMapping.push({
               id: node.id,
               title: node.title,
             });
+
+            if (isPackaging) {
+              packagingVariantId = node.id;
+            }
             return {
               id: node.id,
               compareAtPrice: isPackaging
@@ -366,14 +390,17 @@ const CreateStoreProduct = async ({
   const variantInventoryVariables = {
     variantIds,
   };
-  let inventoryIds;
+  let inventoryUpdateObjs;
   try {
-    inventoryIds = await executeShopifyQueries({
+    inventoryUpdateObjs = await executeShopifyQueries({
       accessToken,
       callback: (result) => {
         return result?.data?.nodes.map((obj) => {
+          const isPackaging = obj.id === packagingVariantId;
           return {
-            delta: bundle.inventory || 0,
+            delta: isPackaging
+              ? Math.min(isPackagingAvailable.remaining, bundle.inventory)
+              : bundle.inventory,
             inventoryItemId: obj.inventoryItem.id,
             locationId: location,
           };
@@ -398,7 +425,7 @@ const CreateStoreProduct = async ({
       input: {
         reason: "correction",
         name: "available",
-        changes: inventoryIds,
+        changes: inventoryUpdateObjs,
       },
     };
 

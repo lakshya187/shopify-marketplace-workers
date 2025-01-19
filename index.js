@@ -1,9 +1,11 @@
-// import MigrateBundlesToShopify from "./jobs/bundles/migrateBundlesMarketplace.js";
+import MigrateBundlesToShopify from "./jobs/bundles/migrateBundlesMarketplace.js";
 // import SyncStoreProducts from "./jobs/products/syncStoreProducts.js";
 // import UpdateMedia from "./jobs/bundles/updateMedia.js";
 // import MigrateProductsToBQ from "./jobs/products/migrateProductsBigQuery.js";
+// import CreateRecommendedBundles from "./jobs/bundles/createRecommendedBundles.js";
 const StartJobs = () => {
-  // MigrateBundlesToShopify();
+  // CreateRecommendedBundles();
+  MigrateBundlesToShopify();
   // SyncStoreProducts();
   // UpdateMedia();
   // MigrateProductsToBQ();

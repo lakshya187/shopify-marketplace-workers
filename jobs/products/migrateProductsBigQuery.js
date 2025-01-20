@@ -1,44 +1,36 @@
 import logger from "#common-functions/logger/index.js";
 import Products from "#schemas/products.js";
 import { BigQuery } from "@google-cloud/bigquery";
+import Bundles from "#schemas/bundles.js";
 
-const bigquery = new BigQuery({ projectId: process.env.GCP_PROJECT_ID });
+const bigquery = new BigQuery({
+  projectId: process.env.GCP_PROJECT_ID,
+  keyFilename: process.env.GCP_SERVICE_ACCOUNT_CREDENTIALS,
+});
 
-const MigrateProductsToBQ = async () => {
+const MigrateBundlesToBQ = async () => {
   try {
     logger("info", "Running CRON to migrate Products to BQML");
 
-    // find products not synced to BQ
-    const productsToProcess = await Products.find({
-      isDeleted: false,
+    // find bundles not synced to BQ
+    const bundlesToProcess = await Bundles.find({
       isCreatedOnBQ: false,
+      isCreatedOnShopify: true,
+      status: "active",
     }).lean();
 
-    if (!productsToProcess || !productsToProcess.length)
+    if (!bundlesToProcess || !bundlesToProcess.length)
       return logger("info", "No products found to migrate to BQML");
 
-    logger("info", "Products to migrate :" + productsToProcess.length);
+    logger("info", "Bundles to migrate :" + bundlesToProcess.length);
 
-    // format the docs
-    const uniqueProductTitles = [];
-    const formattedDocs = productsToProcess
+    const formattedDocs = bundlesToProcess
       .map((p) => {
-        if (p) {
-          const isProductTitleUnique = !uniqueProductTitles.includes(p.title);
-
-          if (isProductTitleUnique) {
-            uniqueProductTitles.push(p.title);
-            return formatProduct(p);
-          }
-        }
-        return null;
+        return formatBundle(p);
       })
       .filter(Boolean);
 
-    logger(
-      "info",
-      "Unique and formatted docs to process: " + formattedDocs.length
-    );
+    logger("info", "formatted docs to process: " + formattedDocs.length);
     // update the data in bq dataset.
     const embeddingResults = await generateEmbeddings(formattedDocs);
     logger(
@@ -51,10 +43,10 @@ const MigrateProductsToBQ = async () => {
       await insertIntoBigQuery(embeddingResults);
       logger("info", "Successfully inserted data into BigQuery.");
 
-      // mark products as synced in MongoDB
-      const productIds = productsToProcess.map((p) => p._id);
-      await Products.updateMany(
-        { _id: { $in: productIds } },
+      // mark bundles as synced in MongoDB
+      const bundleIds = bundlesToProcess.map((p) => p._id);
+      await Bundles.updateMany(
+        { _id: { $in: bundleIds } },
         { $set: { isCreatedOnBQ: true } }
       );
       logger("info", "Successfully updated MongoDB for synced products.");
@@ -62,82 +54,86 @@ const MigrateProductsToBQ = async () => {
       logger("info", "No embeddings generated.");
     }
   } catch (e) {
-    logger("error", "[migrate-products-to-bq]", e);
+    logger("error", "[migrate-bundles-to-bq]", e);
   }
 };
 setInterval(() => {
-  // MigrateProductsToBQ();
-}, process.env.MIGRATE_BUNDLE_WORKER_INTERVAL_MS);
+  MigrateBundlesToBQ();
+}, process.env.MIGRATE_BUNDLES_BQ_WORKER_INTERVAL_MS);
 
-export default MigrateProductsToBQ;
+export default MigrateBundlesToBQ;
 
 // module specific fn
-const formatProduct = (product) => {
-  const cleanBodyHtml = product.description
-    ? product.description
-        .replace(/<\/?[^>]+(>|$)/g, "")
-        .replace(/(\r\n|\n|\r)/gm, "")
-        .replace(/"/g, '\\"')
+const formatBundle = (bundle) => {
+  const cleanBodyHtml = bundle.description
+    ? bundle.description
+        .replace(/<\/?[^>]+(>|$)/g, "") // Remove HTML tags
+        .replace(/(\r\n|\n|\r)/gm, "") // Remove newlines
+        .replace(/"/g, '\\"') // Escape quotes
     : null;
-  const embeddingStr = `This is a component to a gifting bundle. The title is ${
-    product.title
-  } the description is ${cleanBodyHtml}. ${
-    product.tags && product.tags.length
-      ? `Tags are ${product.tags?.join(", ")}`
-      : ""
-  }`;
+
+  // Build the embedding string
+  const embeddingStr = `
+This text represents a gifting bundle for a semantic search system. 
+The gifting bundle is described as follows: 
+- Title: ${bundle.name}
+- Description: ${cleanBodyHtml || "No description provided."}
+- Price: ${bundle.price}
+${
+  bundle.tags && bundle.tags.length
+    ? `- Tags: ${bundle.tags.join(", ")}`
+    : "- Tags: None"
+}
+`.trim();
+
   return {
-    id: product._id.toString(),
+    id: bundle._id.toString(),
     content: embeddingStr,
   };
 };
 
 const generateEmbeddings = async (formattedDocs) => {
   try {
-    const datasetId = process.env.GCP_BQ_DATA_SET_ID;
-    const modelId = process.env.GCP_MODEL_ID;
-    const tempTableName = process.env.GCP_TEMP_TABLE;
+    const location = process.env.GCP_LOCATION;
 
-    // Insert data into the temporary table
-    await bigquery
-      .dataset(datasetId)
-      .table(tempTableName)
-      .insert(formattedDocs);
-
-    // Generate embeddings using the temporary table
-    const query = `
-      SELECT
-        id,
-        JSON_EXTRACT(ml_generate_embedding_result, '$') AS embedding_result
-      FROM
+    const embeddedDocs = [];
+    for (const bundle of formattedDocs) {
+      try {
+        const { id, content } = bundle;
+        const query = `
+        SELECT  
+        ml_generate_embedding_result
+        FROM
         ML.GENERATE_EMBEDDING(
-          MODEL \`${datasetId}.${modelId}\`,
-          (
-            SELECT id, content FROM \`${datasetId}.${tempTableName}\`
-          ),
-          STRUCT(FALSE AS flatten_json_output)
-        )
-    `;
-    const options = {
-      query,
-      location: "us-central1",
-    };
-
-    const [rows] = await bigquery.query(options);
-
-    return rows.map((row) => {
-      if (row) {
-        const content = formattedDocs.find((doc) => doc.id === row.id);
-        return {
-          id: row.id,
-          content: content?.content ?? "",
-          embeddings: JSON.parse(row.embedding_result).predictions[0].embeddings
-            .values,
+          MODEL ${"`"}${process.env.GCP_PROJECT_ID}.${
+          process.env.GCP_BQ_DATA_SET_ID
+        }.${process.env.GCP_MODEL_ID}${"`"},
+            (SELECT '''${content}''' AS content)
+            )
+            `;
+        const options = {
+          query,
+          location,
         };
+        const [row] = await bigquery.query(options);
+        embeddedDocs.push({
+          id,
+          content,
+          embeddings: row[0].ml_generate_embedding_result,
+        });
+        logger("info", `Successfully generated the embeddings for ${id}`);
+      } catch (e) {
+        logger("error", `Error when generating embeddings for ${bundle.id}`, e);
       }
-    });
+    }
+
+    return embeddedDocs;
   } catch (e) {
-    logger("error", "[generate-embeddings]", e);
+    logger(
+      "error",
+      "[generate-embeddings] Error when generating embeddings",
+      e
+    );
     return [];
   }
 };

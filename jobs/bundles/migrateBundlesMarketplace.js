@@ -244,7 +244,7 @@ const CreateStoreProduct = async ({
   }
   const isPackagingAvailable =
     bundle.box &&
-    storeInventory.find(
+    storeInventory?.find(
       (inventory) => inventory.box.toString() === bundle.box._id.toString()
     );
 

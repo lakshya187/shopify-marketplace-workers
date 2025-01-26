@@ -14,6 +14,7 @@ import box from "#schemas/boxes.js";
 import products from "#schemas/products.js";
 import executeShopifyQueries from "#common-functions/shopify/execute.js";
 import {
+  CREATE_OPTIONS,
   CREATE_PRODUCT_WITH_MEDIA,
   GET_PRODUCT_DETAILS,
   GET_PRODUCT_VARIANTS_INVENTORY,
@@ -36,7 +37,10 @@ const MigrateBundlesToShopify = async () => {
       .populate("category")
       .populate("box")
       .populate({ path: "components.product" })
-      .lean();
+      .lean()
+      .populate({
+        path: "options.product",
+      });
 
     if (!activeBundles.length) {
       logger("info", "No active bundles to process.");
@@ -139,8 +143,6 @@ setInterval(() => {
   MigrateBundlesToShopify();
 }, process.env.MIGRATE_BUNDLE_WORKER_INTERVAL_MS);
 
-// utils
-
 export default MigrateBundlesToShopify;
 
 // module specific functions
@@ -153,7 +155,6 @@ const CreateStoreProduct = async ({
   isVendorProduct,
   storeInventory,
 }) => {
-  // creating the product
   const media = [];
   if (bundle.coverImage) {
     media.push({
@@ -171,15 +172,9 @@ const CreateStoreProduct = async ({
       });
     });
   }
-  const box = {};
-  if (bundle.box) {
-    box["price"] = bundle.box.price;
-    box["size"] = bundle.box.sizes.size;
-  }
-  const category = {};
-  if (bundle?.category?.category?.id) {
-    category["category"] = bundle.category.category.id;
-  }
+
+  let options = buildOptionsObjs(bundle.options);
+
   const variables = {
     input: {
       title: bundle.name,
@@ -187,26 +182,15 @@ const CreateStoreProduct = async ({
       tags: bundle.tags || [],
       vendor: bundle.vendor ?? "",
       status: isVendorProduct ? "DRAFT" : "ACTIVE",
-      ...category,
-      productOptions: [
-        {
-          name: BUNDLE_PACKAGING_NAMESPACE,
-          values: [
-            {
-              name: BUNDLE_WITHOUT_PACKAGING_VARIANT,
-            },
-          ],
-        },
-      ],
+      category: bundle.category?.category?.id,
+      productOptions: options,
       metafields: [
         {
           namespace: "custom",
           key: "bundle_components",
           value: JSON.stringify({
             products,
-            box: {
-              ...box,
-            },
+
             storeLogo,
           }),
           type: "json_string",
@@ -235,127 +219,7 @@ const CreateStoreProduct = async ({
     );
     throw new Error(e);
   }
-  // updating the default variant
-  let inventoryPolicy = "";
-  if (bundle.trackInventory) {
-    inventoryPolicy = "DENY";
-  } else {
-    inventoryPolicy = "CONTINUE";
-  }
-  const isPackagingAvailable =
-    bundle.box &&
-    storeInventory?.find(
-      (inventory) => inventory.box.toString() === bundle.box._id.toString()
-    );
 
-  if (isPackagingAvailable && isPackagingAvailable.remaining) {
-    try {
-      await executeShopifyQueries({
-        accessToken,
-        query: PRODUCT_VARIANTS_CREATE,
-        storeUrl,
-        variables: {
-          productId: product.id,
-          variants: [
-            {
-              optionValues: [
-                {
-                  name: BUNDLE_PACKAGING_VARIANT,
-                  optionName: BUNDLE_PACKAGING_NAMESPACE,
-                },
-              ],
-            },
-          ],
-        },
-      });
-    } catch (e) {
-      logger(
-        "error",
-        `[migrate-bundles-marketplace[create-store-product]] Could add the product packaging option`,
-        e
-      );
-      return;
-    }
-  }
-
-  let variants;
-  let variantIds = [];
-  const variantMapping = [];
-  let packagingVariantId = "";
-  try {
-    variants = await executeShopifyQueries({
-      accessToken,
-      query: GET_PRODUCT_DETAILS,
-      storeUrl,
-      variables: {
-        id: product.id,
-      },
-      callback: (result) => {
-        const product = result?.data?.product;
-        return {
-          variants: product.variants.edges.map(({ node }) => {
-            const isPackaging = node.title === BUNDLE_PACKAGING_VARIANT;
-
-            variantIds.push(node.id);
-            variantMapping.push({
-              id: node.id,
-              title: node.title,
-            });
-
-            if (isPackaging) {
-              packagingVariantId = node.id;
-            }
-            return {
-              id: node.id,
-              compareAtPrice: isPackaging
-                ? Number(bundle.compareAtPrice) + (bundle.box?.price ?? 0)
-                : bundle.compareAtPrice,
-              price: isPackaging
-                ? bundle.price + (bundle.box?.price ?? 0)
-                : bundle.price,
-
-              inventoryItem: {
-                tracked: bundle.trackInventory,
-                sku: isPackaging ? `${bundle.sku}_P` : bundle.sku,
-              },
-              inventoryPolicy,
-            };
-          }),
-        };
-      },
-    });
-    logger("info", "Successfully fetched the product variants");
-  } catch (e) {
-    logger(
-      "error",
-      `[migrate-bundles-marketplace[create-store-product]] Could fetch the product variants`,
-      e
-    );
-    return;
-  }
-
-  try {
-    await executeShopifyQueries({
-      accessToken,
-      callback: null,
-      query: PRODUCT_VARIANT_BULK_UPDATE,
-      storeUrl,
-      variables: {
-        productId: product.id,
-        ...variants,
-      },
-    });
-    logger("info", "Successfully updated then product variant");
-  } catch (e) {
-    logger(
-      "error",
-      `[migrate-bundles-marketplace[create-store-product]] Could update the product's default variant`,
-      e
-    );
-    throw new Error(e);
-  }
-
-  // fetch the store location id
   let locations = [];
   let location;
   try {
@@ -385,66 +249,144 @@ const CreateStoreProduct = async ({
       location = defaultLocation.node.id;
     }
   }
-  //updating the inventory
 
-  const variantInventoryVariables = {
-    variantIds,
-  };
-  let inventoryUpdateObjs;
-  try {
-    inventoryUpdateObjs = await executeShopifyQueries({
-      accessToken,
-      callback: (result) => {
-        return result?.data?.nodes.map((obj) => {
-          const isPackaging = obj.id === packagingVariantId;
-          return {
-            delta: isPackaging
-              ? Math.min(isPackagingAvailable.remaining, bundle.inventory)
-              : bundle.inventory,
-            inventoryItemId: obj.inventoryItem.id,
-            locationId: location,
-          };
-        });
-      },
-      query: GET_PRODUCT_VARIANTS_INVENTORY,
-      storeUrl,
-      variables: variantInventoryVariables,
-    });
-    logger("info", "Successfully fetched the inventory for the variants");
-  } catch (e) {
-    logger(
-      "error",
-      `[migrate-bundles-marketplace[create-store-product]] Could not get the  default variant inventory id`,
-      e
-    );
-    throw new Error(e);
+  const allPossibleCombinations = generateAllCombinations({
+    options,
+    basePrice: bundle.price,
+  });
+
+  const updatedCombinations = buildVariantObjs({
+    combinations: allPossibleCombinations.slice(1),
+    compareAtPrice: bundle.compareAtPrice,
+    price: bundle.price,
+    inventory: bundle.inventory,
+    isInventoryTracked: bundle.trackInventory,
+    location: location,
+  });
+  if (updatedCombinations.length) {
+    try {
+      await executeShopifyQueries({
+        accessToken,
+        query: PRODUCT_VARIANTS_CREATE,
+        storeUrl,
+        variables: {
+          productId: product.id,
+          variants: updatedCombinations,
+        },
+      });
+    } catch (e) {
+      logger(
+        "error",
+        `[migrate-bundles-marketplace[create-store-product]] Could add the product packaging option`,
+        e
+      );
+    }
   }
+  // }
 
+  let variants;
+  let variantIds = [];
+  const variantMapping = [];
   try {
-    const inventoryAdjustQuantitiesVariables = {
-      input: {
-        reason: "correction",
-        name: "available",
-        changes: inventoryUpdateObjs,
-      },
-    };
-
-    await executeShopifyQueries({
+    variants = await executeShopifyQueries({
       accessToken,
-      callback: null,
-      query: INVENTORY_ADJUST_QUANTITIES,
+      query: GET_PRODUCT_DETAILS,
       storeUrl,
-      variables: inventoryAdjustQuantitiesVariables,
+      variables: {
+        id: product.id,
+      },
+      callback: (result) => {
+        const product = result?.data?.product;
+        return {
+          variants: product.variants.edges.map(({ node }) => {
+            variantIds.push(node.id);
+            variantMapping.push({
+              id: node.id,
+              title: node.title,
+            });
+          }),
+        };
+      },
     });
-    logger("info", "Successfully updated inventory for the default variant");
+    logger("info", "Successfully fetched the product variants");
   } catch (e) {
     logger(
       "error",
-      `[migrate-bundles-marketplace[create-store-product]] Could adjust the inventory quantities`,
+      `[migrate-bundles-marketplace[create-store-product]] Could fetch the product variants`,
       e
     );
-    throw new Error(e);
+    return;
   }
 
   return { product, variantMapping };
+};
+function generateAllCombinations({ options }) {
+  // Helper function for Cartesian Product
+  function cartesianProduct(arr) {
+    return arr.reduce(
+      (acc, curr) => acc.flatMap((x) => curr.map((y) => [...x, y])),
+      [[]]
+    );
+  }
+
+  // Map options into arrays of their values with associated names
+  const mappedOptions = options.map((option) =>
+    option.values.map((value) => ({
+      name: value.name,
+      optionName: option.name,
+    }))
+  );
+  // Compute Cartesian Product of all options
+  return cartesianProduct(mappedOptions);
+}
+
+const buildVariantObjs = ({
+  combinations,
+  price,
+  isInventoryTracked,
+  inventory,
+  compareAtPrice,
+  sku,
+  location,
+}) => {
+  // let inventoryPolicy = "";
+  // if (isInventoryTracked) {
+  //   inventoryPolicy = "DENY";
+  // } else {
+  //   inventoryPolicy = "CONTINUE";
+  // }
+  return combinations.map((comb) => {
+    // const sku = comb
+    return {
+      optionValues: comb,
+      price,
+      inventoryPolicy: "CONTINUE",
+      compareAtPrice,
+      sku,
+      // inventoryQuantities: {
+      //   availableQuantity: inventory,
+      //   locationId: location,
+      // },
+    };
+  });
+};
+
+const buildOptionsObjs = (options) => {
+  const allOptions = [];
+  if (options && options.length) {
+    options.forEach((bundleOption) => {
+      const { title: productName } = bundleOption.product;
+      bundleOption.options.forEach((option) => {
+        const optionName = `${productName} ${option.name}`;
+        const values = option.values.map((v) => {
+          return { name: v };
+        });
+        allOptions.push({
+          name: optionName,
+          values: values,
+        });
+      });
+    });
+  }
+  return allOptions;
 };

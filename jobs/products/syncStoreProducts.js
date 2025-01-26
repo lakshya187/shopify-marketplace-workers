@@ -47,6 +47,8 @@ const fetchAllProducts = async ({ accessToken, shopUrl }) => {
               src: imageNode.src,
               altText: imageNode.altText || null,
             })),
+            status: node.status,
+            options: node.options,
             variants: node.variants.edges.map(({ node: variantNode }) => ({
               id: variantNode.id,
               title: variantNode.title,
@@ -117,37 +119,43 @@ const SyncStoreProducts = async () => {
             if (!allProducts || !allProducts.length) {
               return;
             }
-            const storeProductObjs = allProducts.map((product) => {
-              let totalInventory = 0;
-              product.variants.forEach(
-                (v) => (totalInventory += Number(v.inventoryQuantity ?? 0))
-              );
-              return {
-                productId: product.id,
-                title: product.title,
-                bodyHtml: product.descriptionHtml || "",
-                createdAt: product.createdAt || new Date(),
-                updatedAt: product.updatedAt || new Date(),
-                handle: product.handle || "",
-                description: product.description || "",
-                descriptionHtml: product.descriptionHtml || "",
-                vendor: product.vendor || "",
-                productType: product.productType || "",
-                tags: product.tags || [],
-                totalInventory: totalInventory,
-                totalVariants: product.variants?.length || 0,
-                onlineStoreUrl: product.onlineStoreUrl || "",
-                customProductType: product.customProductType || "",
-                isGiftCard: product.isGiftCard || false,
-                images: product.images || [],
-                variants: product.variants || [],
-                store: store._id,
-                length: "",
-                width: "",
-                weight: "",
-                height: "",
-              };
-            });
+            const storeProductObjs = allProducts
+              .map((product) => {
+                if (product.status === "DRAFT") {
+                  return null;
+                }
+                let totalInventory = 0;
+                product.variants.forEach(
+                  (v) => (totalInventory += Number(v.inventoryQuantity ?? 0))
+                );
+                return {
+                  productId: product.id,
+                  title: product.title,
+                  bodyHtml: product.descriptionHtml || "",
+                  createdAt: product.createdAt || new Date(),
+                  updatedAt: product.updatedAt || new Date(),
+                  handle: product.handle || "",
+                  description: product.description || "",
+                  descriptionHtml: product.descriptionHtml || "",
+                  vendor: product.vendor || "",
+                  productType: product.productType || "",
+                  tags: product.tags || [],
+                  totalInventory: totalInventory,
+                  totalVariants: product.variants?.length || 0,
+                  onlineStoreUrl: product.onlineStoreUrl || "",
+                  customProductType: product.customProductType || "",
+                  isGiftCard: product.isGiftCard || false,
+                  images: product.images || [],
+                  variants: product.variants || [],
+                  store: store._id,
+                  options: product.options,
+                  length: "",
+                  width: "",
+                  weight: "",
+                  height: "",
+                };
+              })
+              .filter(Boolean);
 
             await Promise.all([
               Products.insertMany(storeProductObjs),

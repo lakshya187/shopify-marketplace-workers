@@ -263,6 +263,7 @@ const CreateStoreProduct = async ({
     isInventoryTracked: bundle.trackInventory,
     location: location,
   });
+
   if (updatedCombinations.length) {
     try {
       await executeShopifyQueries({
@@ -282,6 +283,25 @@ const CreateStoreProduct = async ({
       );
     }
   }
+  const defaultVariant = product.variants?.edges?.[0]?.node;
+
+  if (defaultVariant) {
+    await executeShopifyQueries({
+      accessToken,
+      query: PRODUCT_VARIANT_BULK_UPDATE,
+      storeUrl,
+      variables: {
+        productId: product.id,
+        variants: {
+          id: defaultVariant.id,
+          price: bundle.price,
+          compareAtPrice: bundle.compareAtPrice,
+          inventoryPolicy: "CONTINUE",
+        },
+      },
+    });
+  }
+
   // }
 
   let variants;

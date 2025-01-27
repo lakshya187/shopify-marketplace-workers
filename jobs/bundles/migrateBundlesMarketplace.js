@@ -190,7 +190,8 @@ const CreateStoreProduct = async ({
           key: "bundle_components",
           value: JSON.stringify({
             products,
-
+            storeId: bundle.store,
+            box: bundle.box,
             storeLogo,
           }),
           type: "json_string",

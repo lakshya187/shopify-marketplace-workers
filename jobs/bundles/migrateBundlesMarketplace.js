@@ -2,12 +2,7 @@
 import Bundle from "#schemas/bundles.js";
 import logger from "#common-functions/logger/index.js";
 import Stores from "#schemas/stores.js";
-import {
-  BUNDLE_PACKAGING_NAMESPACE,
-  BUNDLE_PACKAGING_VARIANT,
-  BUNDLE_STATUSES,
-  BUNDLE_WITHOUT_PACKAGING_VARIANT,
-} from "../../constants/bundle/index.js";
+import { BUNDLE_STATUSES } from "../../constants/bundle/index.js";
 import StoreDetails from "#schemas/storeDetails.js";
 import categories from "#schemas/categories.js";
 import box from "#schemas/boxes.js";
@@ -190,7 +185,7 @@ const CreateStoreProduct = async ({
           key: "bundle_components",
           value: JSON.stringify({
             products,
-            storeId: bundle.store,
+            storeId: bundle.store._id,
             box: bundle.box,
             storeLogo,
           }),

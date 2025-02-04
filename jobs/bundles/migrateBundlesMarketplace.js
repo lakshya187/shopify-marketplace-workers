@@ -25,8 +25,9 @@ const processingTemp = {};
 const MigrateBundlesToShopify = async () => {
   try {
     const activeBundles = await Bundle.find({
-      status: BUNDLE_STATUSES.ACTIVE,
-      isCreatedOnShopify: false,
+      // status: BUNDLE_STATUSES.ACTIVE,
+      // isCreatedOnShopify: false,
+      _id: "679f31863ddabf781edb2d94",
     })
       .populate("store")
       .populate("category")
@@ -135,7 +136,7 @@ const MigrateBundlesToShopify = async () => {
 };
 
 setInterval(() => {
-  MigrateBundlesToShopify();
+  // MigrateBundlesToShopify();
 }, process.env.MIGRATE_BUNDLE_WORKER_INTERVAL_MS);
 
 export default MigrateBundlesToShopify;
@@ -379,6 +380,10 @@ const buildVariantObjs = ({
       inventoryPolicy: "CONTINUE",
       compareAtPrice,
       sku,
+      inventoryItem: {
+        tracked: false,
+      },
+
       // inventoryQuantities: {
       //   availableQuantity: inventory,
       //   locationId: location,

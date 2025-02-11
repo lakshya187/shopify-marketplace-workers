@@ -3,7 +3,6 @@ import Bundle from "#schemas/bundles.js";
 import logger from "#common-functions/logger/index.js";
 import Stores from "#schemas/stores.js";
 import { BUNDLE_STATUSES } from "../../constants/bundle/index.js";
-import StoreDetails from "#schemas/storeDetails.js";
 import categories from "#schemas/categories.js";
 import box from "#schemas/boxes.js";
 import products from "#schemas/products.js";
@@ -58,9 +57,7 @@ const MigrateBundlesToShopify = async () => {
                 logger("error", "Already processing the bundle");
                 return;
               }
-              const [storeDetails] = await StoreDetails.find({
-                store: bundle.store._id,
-              }).lean();
+
               const storeInventory = await StoreBoxes.findOne({
                 store: bundle.store._id,
               }).lean();
@@ -73,7 +70,7 @@ const MigrateBundlesToShopify = async () => {
                   products,
                   isInternal: true,
                   storeUrl: store.storeUrl,
-                  storeLogo: storeDetails?.logo ?? "",
+                  storeLogo: bundle?.store?.logo ?? "",
                   storeInventory: storeInventory?.inventory,
                 });
                 const vendorProduct = await CreateStoreProduct({
@@ -83,7 +80,7 @@ const MigrateBundlesToShopify = async () => {
                   products,
                   isInternal: false,
                   storeUrl: bundle.store.storeUrl,
-                  storeLogo: storeDetails?.logo ?? "",
+                  storeLogo: bundle?.store?.logo ?? "",
                   isVendorProduct: true,
                   storeInventory: storeInventory?.inventory,
                 });
